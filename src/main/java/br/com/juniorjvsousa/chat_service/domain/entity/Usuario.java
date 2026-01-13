@@ -24,4 +24,12 @@ public class Usuario {
 
     private String senha;
     private LocalDateTime dataCriacao;
+
+    // para definir a data de criação automaticamente antes de persistir
+    @PrePersist
+    public void presPersist() {
+        if (this.dataCriacao == null) {
+            this.dataCriacao = LocalDateTime.now();
+        }
+    }
 }
