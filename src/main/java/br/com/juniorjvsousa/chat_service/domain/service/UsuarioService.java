@@ -35,4 +35,8 @@ public class UsuarioService {
     public Optional<Usuario> buscarPorId(UUID id) {
         return usuarioRepository.findById(id);
     }
+
+    public boolean usuarioPertenceAoGrupo(UUID usuarioId, UUID grupoId) {
+        return usuarioRepository.existsByIdAndGrupos_Id(usuarioId, grupoId);
+    }
 }

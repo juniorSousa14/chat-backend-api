@@ -29,12 +29,12 @@ public class Mensagem {
     private Usuario remetente;
 
     @ManyToOne
-    @JoinColumn(name = "grupo_id")
-    private ChatGroup grupoDestino;
-
-    @ManyToOne
     @JoinColumn(name = "destino_id")
     private Usuario usuarioDestino;
+
+    @ManyToOne
+    @JoinColumn(name = "grupo_id")
+    private Grupo grupo;
 
 
 }

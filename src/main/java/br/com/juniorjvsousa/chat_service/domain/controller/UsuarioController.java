@@ -4,13 +4,12 @@ import br.com.juniorjvsousa.chat_service.domain.entity.Usuario;
 import br.com.juniorjvsousa.chat_service.domain.service.UsuarioService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.UUID;
 
-@Controller
+@RestController
 @RequestMapping("/usuarios")
 public class UsuarioController {
 
@@ -21,22 +20,39 @@ public class UsuarioController {
     }
 
     @PostMapping
-    public ResponseEntity<Usuario> criar(@RequestBody Usuario usuario) {
+    public ResponseEntity<UsuarioResponse> criar(@RequestBody Usuario usuario) {
         Usuario usuarioSalvo = usuarioService.salvar(usuario);
-        return ResponseEntity.status(HttpStatus.CREATED).body(usuarioSalvo);
+
+        UsuarioResponse response = new UsuarioResponse(
+                usuarioSalvo.getId(),
+                usuarioSalvo.getNome(),
+                usuarioSalvo.getEmail()
+        );
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @GetMapping
-    public ResponseEntity<List<Usuario>> listar() {
+    public ResponseEntity<List<UsuarioResponse>> listar() {
         List<Usuario> usuarios = usuarioService.listar();
-        return ResponseEntity.ok(usuarios);
+
+        List<UsuarioResponse> response = usuarios.stream()
+                .map(u -> new UsuarioResponse(u.getId(), u.getNome(), u.getEmail()))
+                .toList();
+
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Usuario> buscarPorId(@PathVariable UUID id) {
+    public ResponseEntity<UsuarioResponse> buscarPorId(@PathVariable UUID id) {
         return usuarioService.buscarPorId(id)
+                .map(u -> new UsuarioResponse(u.getId(), u.getNome(), u.getEmail()))
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
+
+    public record UsuarioResponse(UUID id, String nome, String email) {
+    }
+
 
 }
