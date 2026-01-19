@@ -19,23 +19,29 @@ public class MensagemController {
     private final MensagemService mensagemService;
 
     @PostMapping
-    public ResponseEntity<Mensagem> enviarMensagem(@RequestBody NovaMensagemRequest request) {
+    public ResponseEntity<MensagemResponse> enviarMensagem(@RequestBody NovaMensagemRequest request) {
         Mensagem mensagem = mensagemService.enviarMensagem(
                 request.usuarioId(),
                 request.conteudo(),
                 request.grupoId(),
                 request.usuario2Id()
         );
-        return ResponseEntity.status(HttpStatus.CREATED).body(mensagem);
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(converterParaDTO(mensagem));
     }
 
     @GetMapping("/privada")
-    public ResponseEntity<List<Mensagem>> listarMensagensEntreUsuarioEUsusario2(
+    public ResponseEntity<List<MensagemResponse>> listarMensagensEntreUsuarioEUsusario2(
             @RequestParam UUID usuarioId,
             @RequestParam UUID usuario2Id) {
 
         List<Mensagem> mensagens = mensagemService.listarMensagensPorUsuario(usuarioId, usuario2Id);
-        return ResponseEntity.ok(mensagens);
+
+        List<MensagemResponse> resposta = mensagens.stream()
+                .map(this::converterParaDTO)
+                .toList();
+
+        return ResponseEntity.ok(resposta);
     }
 
     @GetMapping("/grupo/{grupoId}")
@@ -43,19 +49,24 @@ public class MensagemController {
         List<Mensagem> mensagens = mensagemService.listarMensagensDoGrupo(grupoId);
 
         List<MensagemResponse> resposta = mensagens.stream()
-                .map(m -> new MensagemResponse(
-                        m.getId(),
-                        m.getConteudo(),
-                        m.getDataEnvio(),
-                        m.getRemetente().getNome(),
-                        m.getRemetente().getId(),
-                        true // É grupo
-                ))
+                .map(this::converterParaDTO)
                 .toList();
 
         return ResponseEntity.ok(resposta);
     }
 
+    private MensagemResponse converterParaDTO(Mensagem m) {
+        return new MensagemResponse(
+                m.getId(),
+                m.getConteudo(),
+                m.getDataEnvio(),
+                m.getRemetente().getNome(),
+                m.getRemetente().getId(),
+                m.getGrupo() != null
+        );
+    }
+
+    // DTOs
     public record NovaMensagemRequest(UUID usuarioId, UUID usuario2Id, String conteudo, UUID grupoId) {
     }
 

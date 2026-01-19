@@ -18,9 +18,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
-public class
-
-MensagemService {
+public class MensagemService {
 
     private final UsuarioRepository usuarioRepository;
     private final MensagemRepository mensagemRepository;
@@ -44,6 +42,7 @@ MensagemService {
         if (grupoId != null) {
             Grupo grupo = grupoRepository.findById(grupoId)
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Grupo não encontrado"));
+
             if (!usuarioService.usuarioPertenceAoGrupo(usuarioId, grupoId)) {
                 throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Usuário não pertence ao grupo especificado.");
             }
@@ -54,16 +53,16 @@ MensagemService {
             mensagemBuilder.usuarioDestino(destinatario);
         } else {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Deve ser especificado um grupo ou um usuário destinatário.");
-
         }
+
         return mensagemRepository.save(mensagemBuilder.build());
     }
 
     public List<Mensagem> listarMensagensDoGrupo(UUID grupoId) {
         Grupo grupo = grupoRepository.findById(grupoId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Grupo não encontrado"));
-        return mensagemRepository.findAllByGrupo(grupo);
 
+        return mensagemRepository.findByGrupoOrderByDataEnvioAsc(grupo);
     }
 
     public List<Mensagem> listarMensagensPorUsuario(UUID usuario1Id, UUID usuario2Id) {
@@ -74,6 +73,5 @@ MensagemService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuário 2 não encontrado"));
 
         return mensagemRepository.findConversaEntre(usuario1, usuario2);
-
     }
 }

@@ -3,7 +3,9 @@ package br.com.juniorjvsousa.chat_service;
 import br.com.juniorjvsousa.chat_service.domain.entity.Usuario;
 import br.com.juniorjvsousa.chat_service.domain.repository.UsuarioRepository;
 import br.com.juniorjvsousa.chat_service.domain.service.UsuarioService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -19,67 +21,72 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
-@ExtendWith(MockitoExtension.class)
+@DisplayName("Testes do Domínio de Usuário")
 public class UsuarioTest {
 
-    @Mock
-    private UsuarioRepository usuarioRepository;
+    @Nested
+    @DisplayName("Testes do Service")
+    @ExtendWith(MockitoExtension.class)
+    class ServiceTests {
 
-    @InjectMocks
-    private UsuarioService usuarioService;
+        private final UUID ID_USUARIO = UUID.randomUUID();
+        @Mock
+        private UsuarioRepository usuarioRepository;
+        @InjectMocks
+        private UsuarioService usuarioService;
+        private Usuario usuarioPadrao;
 
-    @Test
-    @DisplayName("Deve salvar usuário com sucesso quando e-mail não existe")
-    void deveSalvarUsuarioComSucesso() {
-        Usuario usuarioParaSalvar = Usuario.builder()
-                .nome("Teste")
-                .email("novo@teste.com")
-                .senha("123")
-                .build();
+        @BeforeEach
+        void setUp() {
+            usuarioPadrao = Usuario.builder()
+                    .id(ID_USUARIO)
+                    .nome("Junior Sousa")
+                    .email("junior@teste.com")
+                    .senha("123456")
+                    .build();
+        }
 
+        @Test
+        @DisplayName("Deve salvar usuário com sucesso")
+        void deveSalvarUsuarioComSucesso() {
+            // Arrange
+            when(usuarioRepository.existsByEmail(usuarioPadrao.getEmail())).thenReturn(false);
+            when(usuarioRepository.save(any(Usuario.class))).thenReturn(usuarioPadrao);
 
-        when(usuarioRepository.existsByEmail("novo@teste.com")).thenReturn(false);
-        when(usuarioRepository.save(any())).thenAnswer(invocation -> {
-            Usuario u = invocation.getArgument(0);
-            u.setId(UUID.randomUUID());
-            return u;
-        });
+            // Act
+            Usuario resultado = usuarioService.salvar(usuarioPadrao);
 
-        Usuario usuarioSalvo = usuarioService.salvar(usuarioParaSalvar);
+            // Assert
+            assertNotNull(resultado.getId());
+            assertEquals(usuarioPadrao.getEmail(), resultado.getEmail());
+            verify(usuarioRepository).save(any(Usuario.class));
+        }
 
-        assertNotNull(usuarioSalvo.getId());
-        assertEquals("novo@teste.com", usuarioSalvo.getEmail());
+        @Test
+        @DisplayName("Deve lançar erro ao tentar salvar e-mail duplicado")
+        void deveLancarErroEmailDuplicado() {
+            // Arrange
+            when(usuarioRepository.existsByEmail(usuarioPadrao.getEmail())).thenReturn(true);
 
-        verify(usuarioRepository, times(1)).save(any());
-    }
+            // Act
+            ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
+                    usuarioService.salvar(usuarioPadrao)
+            );
 
-    @Test
-    @DisplayName("Deve lançar erro 409 quando tentar salvar e-mail duplicado")
-    void deveLancarErroAoSalvarEmailDuplicado() {
-        Usuario usuario = Usuario.builder().email("duplicado@gmail.com").build();
+            // Assert
+            assertEquals(HttpStatus.CONFLICT, ex.getStatusCode());
+            verify(usuarioRepository, never()).save(any());
+        }
 
-        when(usuarioRepository.existsByEmail("duplicado@gmail.com")).thenReturn(true);
+        @Test
+        @DisplayName("Deve buscar por ID com sucesso")
+        void deveBuscarPorId() {
+            when(usuarioRepository.findById(ID_USUARIO)).thenReturn(Optional.of(usuarioPadrao));
 
-        ResponseStatusException exception = assertThrows(ResponseStatusException.class, () -> {
-            usuarioService.salvar(usuario);
+            Optional<Usuario> resultado = usuarioService.buscarPorId(ID_USUARIO);
 
-        });
-
-        assertEquals(HttpStatus.CONFLICT, exception.getStatusCode());
-        verify(usuarioRepository, never()).save(any());
-    }
-
-    @Test
-    @DisplayName("Deve retornar usuário quando buscar por ID existente")
-    void deveBuscarPorIdComSucesso() {
-        UUID id = UUID.randomUUID();
-        Usuario usuario = Usuario.builder().id(id).nome("Junior").build();
-
-        when(usuarioRepository.findById(id)).thenReturn(Optional.of(usuario));
-        Optional<Usuario> resultado = usuarioService.buscarPorId(id);
-
-        assertTrue(resultado.isPresent());
-        assertEquals(id, resultado.get().getId());
+            assertTrue(resultado.isPresent());
+            assertEquals(ID_USUARIO, resultado.get().getId());
+        }
     }
 }
-
