@@ -2,6 +2,8 @@ package br.com.juniorjvsousa.chat_service.domain.controller;
 
 import br.com.juniorjvsousa.chat_service.domain.entity.Mensagem;
 import br.com.juniorjvsousa.chat_service.domain.service.MensagemService;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -67,7 +69,16 @@ public class MensagemController {
     }
 
     // DTOs
-    public record NovaMensagemRequest(UUID usuarioId, UUID usuario2Id, String conteudo, UUID grupoId) {
+    public record NovaMensagemRequest(
+            @NotNull(message = "ID do remetente é obrigatório")
+            UUID usuarioId,
+
+            UUID usuario2Id,
+
+            @NotBlank(message = "O conteúdo da mensagem não pode estar vazio")
+            String conteudo,
+
+            UUID grupoId) {
     }
 
     public record MensagemResponse(

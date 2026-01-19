@@ -3,6 +3,8 @@ package br.com.juniorjvsousa.chat_service.domain.controller;
 
 import br.com.juniorjvsousa.chat_service.domain.entity.Grupo;
 import br.com.juniorjvsousa.chat_service.domain.service.GrupoService;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -57,7 +59,12 @@ public class GrupoController {
         );
     }
 
-    public record NovoGrupoRequest(String nome, List<UUID> idMembros) {
+    public record NovoGrupoRequest(
+            @NotBlank(message = "Nome do grupo é obrigatório")
+            String nome,
+
+            @NotEmpty(message = "O grupo deve ter pelo menos um membro inicial")
+            List<UUID> idMembros) {
     }
 
     public record GrupoResponse(UUID id, String nome, List<MembroResponse> membros) {

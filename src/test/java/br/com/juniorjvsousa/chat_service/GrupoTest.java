@@ -7,7 +7,6 @@ import br.com.juniorjvsousa.chat_service.domain.repository.GrupoRepository;
 import br.com.juniorjvsousa.chat_service.domain.repository.UsuarioRepository;
 import br.com.juniorjvsousa.chat_service.domain.service.GrupoService;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -34,124 +33,110 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@DisplayName("Testes do Domínio de Grupo")
+@ExtendWith(MockitoExtension.class)
 public class GrupoTest {
 
-    private static final UUID ID_USUARIO = UUID.randomUUID();
-    private static final UUID ID_GRUPO = UUID.randomUUID();
-    private static final String NOME_GRUPO = "Grupo Java";
-
     @Nested
-    @DisplayName("Testes do Service")
+    @DisplayName("Testes do Service (Lógica de Negócio)")
     @ExtendWith(MockitoExtension.class)
     class ServiceTests {
 
         @Mock
         private GrupoRepository grupoRepository;
+
         @Mock
         private UsuarioRepository usuarioRepository;
+
         @InjectMocks
         private GrupoService grupoService;
 
-        private Usuario membro;
-        private Grupo grupo;
-
-        @BeforeEach
-        void setUp() {
-            membro = new Usuario();
-            membro.setId(ID_USUARIO);
-            membro.setNome("Junior");
-
-            grupo = Grupo.builder()
-                    .id(ID_GRUPO)
-                    .nome(NOME_GRUPO)
-                    .membros(List.of(membro))
-                    .build();
-        }
-
         @Test
-        @DisplayName("Deve criar grupo corretamente")
+        @DisplayName("Deve criar grupo salvando membros corretamente")
         void deveCriarGrupo() {
-            List<UUID> ids = List.of(ID_USUARIO);
+            UUID id1 = UUID.randomUUID();
+            Usuario u1 = new Usuario();
+            u1.setId(id1);
+            List<UUID> ids = List.of(id1);
 
-            when(usuarioRepository.findAllById(ids)).thenReturn(List.of(membro));
-            when(grupoRepository.save(any(Grupo.class))).thenReturn(grupo);
+            when(usuarioRepository.findAllById(ids)).thenReturn(List.of(u1));
+            when(grupoRepository.save(any(Grupo.class))).thenAnswer(inv -> {
+                Grupo g = inv.getArgument(0);
+                g.setId(UUID.randomUUID());
+                return g;
+            });
 
-            Grupo resultado = grupoService.criarGrupo(NOME_GRUPO, ids);
+            Grupo resultado = grupoService.criarGrupo("Grupo Teste", ids);
 
             assertNotNull(resultado.getId());
-            assertEquals(NOME_GRUPO, resultado.getNome());
+            assertEquals("Grupo Teste", resultado.getNome());
             assertEquals(1, resultado.getMembros().size());
             verify(grupoRepository).save(any(Grupo.class));
         }
 
         @Test
-        @DisplayName("Deve listar todos os grupos")
+        @DisplayName("Deve retornar todos os grupos")
         void deveListarGrupos() {
-            when(grupoRepository.findAll()).thenReturn(List.of(grupo));
-
+            when(grupoRepository.findAll()).thenReturn(List.of(new Grupo(), new Grupo()));
             List<Grupo> lista = grupoService.listarGrupos();
-
-            assertEquals(1, lista.size());
-            assertEquals(NOME_GRUPO, lista.get(0).getNome());
+            assertEquals(2, lista.size());
         }
     }
 
     @Nested
-    @DisplayName("Testes do Controller")
+    @DisplayName("Testes do Controller (API REST)")
     @WebMvcTest(GrupoController.class)
     class ControllerTests {
 
         @Autowired
         private MockMvc mockMvc;
+
         @Autowired
         private ObjectMapper objectMapper;
+
         @MockBean
         private GrupoService grupoService;
 
-        private Usuario membro;
-        private Grupo grupo;
+        @Test
+        @DisplayName("POST /grupos - Deve retornar 201 e JSON Seguro (DTO)")
+        void deveCriarGrupoViaApi() throws Exception {
+            UUID userId = UUID.randomUUID();
+            GrupoController.NovoGrupoRequest request =
+                    new GrupoController.NovoGrupoRequest("Devs Java", List.of(userId));
 
-        @BeforeEach
-        void setUp() {
-            membro = new Usuario();
-            membro.setId(ID_USUARIO);
+            Usuario membro = new Usuario();
+            membro.setId(userId);
             membro.setNome("Junior");
             membro.setSenha("123456");
 
-            grupo = Grupo.builder()
-                    .id(ID_GRUPO)
-                    .nome(NOME_GRUPO)
-                    .membros(List.of(membro))
-                    .build();
-        }
+            Grupo grupoRetornado = new Grupo();
+            grupoRetornado.setId(UUID.randomUUID());
+            grupoRetornado.setNome("Devs Java");
+            grupoRetornado.setMembros(List.of(membro));
 
-        @Test
-        @DisplayName("POST /grupos - Deve retornar 201 e DTO Seguro")
-        void deveCriarGrupoViaApi() throws Exception {
-            GrupoController.NovoGrupoRequest request =
-                    new GrupoController.NovoGrupoRequest(NOME_GRUPO, List.of(ID_USUARIO));
-
-            when(grupoService.criarGrupo(eq(NOME_GRUPO), anyList())).thenReturn(grupo);
+            when(grupoService.criarGrupo(eq("Devs Java"), anyList())).thenReturn(grupoRetornado);
 
             mockMvc.perform(post("/grupos")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isCreated())
-                    .andExpect(jsonPath("$.nome").value(NOME_GRUPO))
+                    .andExpect(jsonPath("$.nome").value("Devs Java"))
                     .andExpect(jsonPath("$.membros[0].nome").value("Junior"))
-                    // Garante segurança
                     .andExpect(jsonPath("$.membros[0].senha").doesNotExist());
         }
 
         @Test
         @DisplayName("GET /grupos - Deve listar convertendo para DTO")
         void deveListarGruposViaApi() throws Exception {
-            when(grupoService.listarGrupos()).thenReturn(List.of(grupo));
+            Grupo g = new Grupo();
+            g.setId(UUID.randomUUID());
+            g.setNome("Grupo API");
+            g.setMembros(List.of());
+
+            when(grupoService.listarGrupos()).thenReturn(List.of(g));
 
             mockMvc.perform(get("/grupos"))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$[0].nome").value(NOME_GRUPO));
+                    .andExpect(jsonPath("$[0].nome").value("Grupo API"));
         }
     }
 }
