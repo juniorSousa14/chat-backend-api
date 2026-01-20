@@ -3,7 +3,9 @@ package br.com.juniorjvsousa.chat_service.domain.service;
 import br.com.juniorjvsousa.chat_service.domain.entity.Usuario;
 import br.com.juniorjvsousa.chat_service.domain.repository.UsuarioRepository;
 import jakarta.transaction.Transactional;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -12,19 +14,25 @@ import java.util.Optional;
 import java.util.UUID;
 
 @Service
+@RequiredArgsConstructor
 public class UsuarioService {
 
     private final UsuarioRepository usuarioRepository;
+    private final PasswordEncoder passwordEncoder;
 
-    public UsuarioService(UsuarioRepository usuarioRepository) {
-        this.usuarioRepository = usuarioRepository;
-    }
 
     @Transactional
     public Usuario salvar(Usuario usuario) {
+
+        usuario.setId(null);
+
         if (usuarioRepository.existsByEmail(usuario.getEmail())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Email já cadastrado");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "E-mail já cadastrado");
         }
+
+        String senhaCriptografada = passwordEncoder.encode(usuario.getSenha());
+        usuario.setSenha(senhaCriptografada);
+
         return usuarioRepository.save(usuario);
     }
 
