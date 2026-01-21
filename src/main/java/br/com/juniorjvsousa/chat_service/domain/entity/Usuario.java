@@ -39,6 +39,10 @@ public class Usuario implements UserDetails {
     private String email;
 
     @NotNull
+    @NotBlank(message = "O Telefone é obrigatório")
+    private String telefone;
+
+    @NotNull
     @NotBlank(message = "A senha é obrigatória")
     @Size(min = 6, message = "A senha deve ter no mínimo 6 caracteres")
     private String senha;
@@ -60,7 +64,7 @@ public class Usuario implements UserDetails {
     @Override
     @JsonIgnore
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        // Define o perfil do usuário. Por enquanto, todo mundo é USER.
+        // Define o perfil do usuário. Por enquanto todos são USER.
         return List.of(new SimpleGrantedAuthority("ROLE_USER"));
     }
 

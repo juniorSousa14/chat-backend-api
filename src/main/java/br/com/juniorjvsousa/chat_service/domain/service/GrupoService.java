@@ -29,6 +29,34 @@ public class GrupoService {
         return grupoRepository.save(grupo);
     }
 
+    // metodo para remover membro do grupo
+    @Transactional
+    public void adicionarMembro(UUID grupoId, UUID usuarioId) {
+        Grupo grupo = grupoRepository.findById(grupoId)
+                .orElseThrow(() -> new RuntimeException("Grupo não encontrado"));
+
+        Usuario usuario = usuarioRepository.findById(usuarioId)
+                .orElseThrow(() -> new RuntimeException("Usuário não encontrado"));
+
+        if (!grupo.getMembros().contains(usuario)) {
+            grupo.getMembros().add(usuario);
+            grupoRepository.save(grupo);
+        }
+    }
+
+    // metodo para remover membro do grupo
+    @Transactional
+    public void removerMembro(UUID grupoId, UUID usuarioId) {
+        Grupo grupo = grupoRepository.findById(grupoId)
+                .orElseThrow(() -> new RuntimeException("Grupo não encontrado"));
+
+        Usuario usuario = usuarioRepository.findById(usuarioId)
+                .orElseThrow(() -> new RuntimeException("Usuário não encontrado"));
+
+        grupo.getMembros().remove(usuario);
+        grupoRepository.save(grupo);
+    }
+
     public List<Grupo> listarGrupos() {
         return grupoRepository.findAll();
     }

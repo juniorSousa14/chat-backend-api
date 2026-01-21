@@ -35,6 +35,9 @@ public class SecurityConfigurations {
                         // Liberar Swagger (Documentação)
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
 
+                        // Liberar WebSocket
+                        .requestMatchers("/ws/**").permitAll()
+
                         // Bloquear todo o resto
                         .anyRequest().authenticated()
                 )

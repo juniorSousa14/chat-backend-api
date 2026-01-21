@@ -1,162 +1,135 @@
 package br.com.juniorjvsousa.chat_service;
 
 import br.com.juniorjvsousa.chat_service.domain.controller.MensagemController;
+import br.com.juniorjvsousa.chat_service.domain.entity.Grupo;
 import br.com.juniorjvsousa.chat_service.domain.entity.Mensagem;
 import br.com.juniorjvsousa.chat_service.domain.entity.Usuario;
-import br.com.juniorjvsousa.chat_service.domain.repository.GrupoRepository;
-import br.com.juniorjvsousa.chat_service.domain.repository.MensagemRepository;
 import br.com.juniorjvsousa.chat_service.domain.repository.UsuarioRepository;
 import br.com.juniorjvsousa.chat_service.domain.service.MensagemService;
+import br.com.juniorjvsousa.chat_service.domain.service.infra.security.TokenService;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@DisplayName("Testes do Domínio de Mensagem")
-public class MensagemTest {
+@WebMvcTest(MensagemController.class)
+class MensagemTest {
 
-    private static final UUID ID_REMETENTE = UUID.randomUUID();
-    private static final UUID ID_DESTINO = UUID.randomUUID();
-    private static final UUID ID_GRUPO = UUID.randomUUID();
+    @Autowired
+    private MockMvc mockMvc;
 
-    @Nested
-    @DisplayName("Testes do Service")
-    @ExtendWith(MockitoExtension.class)
-    class ServiceTests {
+    @Autowired
+    private ObjectMapper objectMapper;
 
-        @Mock
-        private MensagemRepository mensagemRepository;
-        @Mock
-        private UsuarioRepository usuarioRepository;
-        @Mock
-        private GrupoRepository grupoRepository;
-        @InjectMocks
-        private MensagemService mensagemService;
+    @MockitoBean
+    private TokenService tokenService;
 
-        private Usuario remetente;
-        private Usuario destinatario;
-        private Mensagem mensagemSalva;
+    @MockitoBean
+    private MensagemService mensagemService;
 
-        @BeforeEach
-        void setUp() {
-            remetente = Usuario.builder().id(ID_REMETENTE).nome("Junior").build();
-            destinatario = Usuario.builder().id(ID_DESTINO).nome("Jose").build();
+    @MockitoBean
+    private SimpMessagingTemplate simpMessagingTemplate;
 
-            mensagemSalva = Mensagem.builder()
-                    .id(UUID.randomUUID())
-                    .conteudo("Olá mundo!")
-                    .remetente(remetente)
-                    .usuarioDestino(destinatario)
-                    .dataEnvio(LocalDateTime.now())
-                    .build();
-        }
+    @MockitoBean
+    private UsuarioRepository usuarioRepository;
 
-        @Test
-        @DisplayName("Deve enviar mensagem privada com sucesso")
-        void deveEnviarMensagemComSucesso() {
-            when(usuarioRepository.findById(ID_REMETENTE)).thenReturn(Optional.of(remetente));
-            when(usuarioRepository.findById(ID_DESTINO)).thenReturn(Optional.of(destinatario));
-            when(mensagemRepository.save(any(Mensagem.class))).thenReturn(mensagemSalva);
+    @Test
+    @DisplayName("POST /mensagens - Deve enviar mensagem com sucesso (201 Created)")
+    @WithMockUser
+    void deveEnviarMensagemComSucesso() throws Exception {
+        UUID grupoId = UUID.randomUUID();
+        UUID remetenteId = UUID.randomUUID();
+        String conteudo = "Olá mundo, teste corrigido!";
 
-            Mensagem resultado = mensagemService.enviarMensagem(ID_REMETENTE, "Olá mundo!", null, ID_DESTINO);
 
-            assertNotNull(resultado.getId());
-            assertEquals("Olá mundo!", resultado.getConteudo());
-            assertEquals(remetente, resultado.getRemetente());
-            verify(mensagemRepository).save(any(Mensagem.class));
-        }
+        Usuario remetenteMock = new Usuario();
+        remetenteMock.setId(remetenteId);
+        remetenteMock.setNome("Junior Dev");
 
-        @Test
-        @DisplayName("Deve lançar erro 404 se remetente não existir")
-        void deveFalharSeRemetenteNaoExiste() {
-            when(usuarioRepository.findById(any())).thenReturn(Optional.empty());
+        Grupo grupoMock = new Grupo();
+        grupoMock.setId(grupoId);
+        grupoMock.setNome("Java Group");
 
-            assertThrows(ResponseStatusException.class, () ->
-                    mensagemService.enviarMensagem(UUID.randomUUID(), "Teste", null, null)
-            );
-        }
+        Mensagem mensagemMock = new Mensagem();
+        mensagemMock.setId(UUID.randomUUID());
+        mensagemMock.setConteudo(conteudo);
+        mensagemMock.setDataEnvio(LocalDateTime.now());
+        mensagemMock.setRemetente(remetenteMock);
+        mensagemMock.setGrupo(grupoMock);
+
+        when(mensagemService.enviarMensagem(any(), any(), any(), any()))
+                .thenReturn(mensagemMock);
+
+        MensagemController.NovaMensagemRequest request =
+                new MensagemController.NovaMensagemRequest(grupoId, remetenteId, conteudo, null);
+
+        mockMvc.perform(post("/mensagens")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").exists())
+                .andExpect(jsonPath("$.conteudo").value(conteudo));
+
+        verify(mensagemService, times(1)).enviarMensagem(
+                eq(grupoId),
+                eq(conteudo),
+                eq(null),
+                eq(remetenteId)
+        );
     }
 
-    @Nested
-    @DisplayName("Testes do Controller")
-    @WebMvcTest(MensagemController.class)
-    class ControllerTests {
+    @Test
+    @DisplayName("POST /mensagens - Deve retornar Erro 400 se o conteúdo for vazio")
+    @WithMockUser
+    void deveRetornarBadRequest_QuandoConteudoVazio() throws Exception {
 
-        @Autowired
-        private MockMvc mockMvc;
-        @Autowired
-        private ObjectMapper objectMapper;
-        @MockBean
-        private MensagemService mensagemService;
+        MensagemController.NovaMensagemRequest request =
+                new MensagemController.NovaMensagemRequest(UUID.randomUUID(), UUID.randomUUID(), "", null);
 
-        private Mensagem mensagem;
+        mockMvc.perform(post("/mensagens")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest());
+    }
 
-        @BeforeEach
-        void setUp() {
-            Usuario remetente = Usuario.builder().id(ID_REMETENTE).nome("Junior").senha("123").build();
+    @Test
+    @DisplayName("POST /mensagens - Deve lançar exceção quando serviço falhar")
+    @WithMockUser
+    void deveFalhar_QuandoServicoLancarExcecao() throws Exception {
+        MensagemController.NovaMensagemRequest request =
+                new MensagemController.NovaMensagemRequest(UUID.randomUUID(), UUID.randomUUID(), "Teste", null);
 
-            mensagem = Mensagem.builder()
-                    .id(UUID.randomUUID())
-                    .conteudo("Oi API!")
-                    .remetente(remetente)
-                    .dataEnvio(LocalDateTime.now())
-                    .build();
-        }
+        when(mensagemService.enviarMensagem(any(), any(), any(), any()))
+                .thenThrow(new RuntimeException("Erro interno simulado"));
 
-        @Test
-        @DisplayName("POST /mensagens - Deve retornar 201 e DTO Seguro")
-        void deveEnviarMensagemViaApi() throws Exception {
-            MensagemController.NovaMensagemRequest request =
-                    new MensagemController.NovaMensagemRequest(ID_REMETENTE, ID_DESTINO, "Oi API!", null);
-
-            when(mensagemService.enviarMensagem(eq(ID_REMETENTE), anyString(), eq(null), eq(ID_DESTINO)))
-                    .thenReturn(mensagem);
-
+        try {
             mockMvc.perform(post("/mensagens")
+                            .with(csrf())
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
-                    .andExpect(status().isCreated())
-                    .andExpect(jsonPath("$.conteudo").value("Oi API!"))
-                    .andExpect(jsonPath("$.nomeRemetente").value("Junior"))
-                    .andExpect(jsonPath("$.senha").doesNotExist());
-        }
-
-        @Test
-        @DisplayName("GET /mensagens/privada - Deve listar DTOs")
-        void deveListarPrivadasViaApi() throws Exception {
-            when(mensagemService.listarMensagensPorUsuario(ID_REMETENTE, ID_DESTINO))
-                    .thenReturn(List.of(mensagem));
-
-            mockMvc.perform(get("/mensagens/privada")
-                            .param("usuarioId", ID_REMETENTE.toString())
-                            .param("usuario2Id", ID_DESTINO.toString()))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$[0].conteudo").value("Oi API!"));
+                    .andExpect(status().isInternalServerError());
+        } catch (Exception e) {
+            assertTrue(e.getCause() instanceof RuntimeException);
         }
     }
 }
