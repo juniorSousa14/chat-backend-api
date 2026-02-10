@@ -1,6 +1,8 @@
 package br.com.juniorjvsousa.chat_service.domain.controller;
 
+import br.com.juniorjvsousa.chat_service.domain.dto.CriarGrupoDTO;
 import br.com.juniorjvsousa.chat_service.domain.entity.Grupo;
+import br.com.juniorjvsousa.chat_service.domain.entity.Usuario;
 import br.com.juniorjvsousa.chat_service.domain.service.GrupoService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -11,6 +13,8 @@ import jakarta.validation.constraints.NotNull;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -26,11 +30,21 @@ public class GrupoController {
     private final GrupoService grupoService;
 
     @PostMapping
-    @Operation(summary = "Criar Grupo", description = "Cria um novo grupo com uma lista inicial de membros.")
+    @Operation(summary = "Criar Grupo", description = "Cria um novo grupo. O usuário logado será o administrador.")
     public ResponseEntity<GrupoResponse> criarGrupo(@RequestBody NovoGrupoRequest request) {
-        Grupo grupoSalvo = grupoService.criarGrupo(request.nome(), request.idMembros());
+        UUID criadorId = getUsuarioIdAutenticado();
+
+        CriarGrupoDTO dto = new CriarGrupoDTO(
+                request.nome(),
+                criadorId,
+                request.idMembros()
+        );
+
+        Grupo grupoSalvo = grupoService.criarGrupo(dto);
+
         return ResponseEntity.status(HttpStatus.CREATED).body(converterParaDTO(grupoSalvo));
     }
+
 
     @GetMapping
     @Operation(summary = "Listar Grupos", description = "Lista todos os grupos cadastrados.")
@@ -52,23 +66,27 @@ public class GrupoController {
     }
 
     @PostMapping("/{grupoId}/membros")
-    @Operation(summary = "Adicionar Membro", description = "Adiciona um usuário existente ao grupo.")
+    @Operation(summary = "Adicionar Membro", description = "Adiciona um usuário ao grupo (Requer permissão de Admin).")
     public ResponseEntity<Void> adicionarMembro(
             @PathVariable UUID grupoId,
             @RequestBody AdicionarMembroRequest request) {
 
-        grupoService.adicionarMembro(grupoId, request.usuarioId());
+        UUID solicitanteId = getUsuarioIdAutenticado();
+
+        grupoService.adicionarMembro(grupoId, request.usuarioId(), solicitanteId);
 
         return ResponseEntity.ok().build();
     }
 
     @DeleteMapping("/{grupoId}/membros/{usuarioId}")
-    @Operation(summary = "Remover Membro", description = "Remove um usuário do grupo.")
+    @Operation(summary = "Remover Membro", description = "Remove um usuário do grupo (Requer permissão de Admin).")
     public ResponseEntity<Void> removerMembro(
             @PathVariable UUID grupoId,
             @PathVariable UUID usuarioId) {
 
-        grupoService.removerMembro(grupoId, usuarioId);
+        UUID solicitanteId = getUsuarioIdAutenticado();
+
+        grupoService.removerMembro(grupoId, usuarioId, solicitanteId);
 
         return ResponseEntity.noContent().build();
     }
@@ -84,6 +102,18 @@ public class GrupoController {
                 grupo.getNome(),
                 membrosSeguros
         );
+    }
+
+    // Metodo auxiliar para extrair o ID do usuário do Token JWT/Session
+
+    private UUID getUsuarioIdAutenticado() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+
+        if (authentication != null && authentication.getPrincipal() instanceof Usuario usuario) {
+            return usuario.getId();
+        }
+
+        throw new RuntimeException("Usuário não autenticado ou contexto de segurança inválido.");
     }
 
     // DTOs modelo para o corpo das requisições e respostas
@@ -110,4 +140,6 @@ public class GrupoController {
 
     public record MembroResponse(UUID id, String nome) {
     }
+
+
 }

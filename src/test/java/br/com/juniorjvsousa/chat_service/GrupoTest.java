@@ -1,6 +1,7 @@
 package br.com.juniorjvsousa.chat_service;
 
 import br.com.juniorjvsousa.chat_service.domain.controller.GrupoController;
+import br.com.juniorjvsousa.chat_service.domain.dto.CriarGrupoDTO;
 import br.com.juniorjvsousa.chat_service.domain.entity.Grupo;
 import br.com.juniorjvsousa.chat_service.domain.entity.Usuario;
 import br.com.juniorjvsousa.chat_service.domain.repository.GrupoRepository;
@@ -16,21 +17,23 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
-import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.web.server.ResponseStatusException;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -41,8 +44,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 public class GrupoTest {
 
     @Nested
-    @DisplayName("Testes do Service (Regras de Negócio)")
-    @ExtendWith(MockitoExtension.class)
+    @DisplayName("Testes do Service (Regras de Negócio e Admins)")
     class ServiceTests {
         @Mock
         private GrupoRepository grupoRepository;
@@ -53,55 +55,87 @@ public class GrupoTest {
 
         @Test
         void deveCriarGrupo() {
-            UUID idUsuario = UUID.randomUUID();
-            Usuario u1 = Usuario.builder().id(idUsuario).nome("User").build();
-            List<UUID> ids = List.of(idUsuario);
-            when(usuarioRepository.findAllById(ids)).thenReturn(List.of(u1));
+            UUID criadorId = UUID.randomUUID();
+            Usuario criador = new Usuario();
+            criador.setId(criadorId);
+            CriarGrupoDTO dto = new CriarGrupoDTO("Grupo Teste", criadorId, null);
+
+            when(usuarioRepository.findById(criadorId)).thenReturn(Optional.of(criador));
+
             when(grupoRepository.save(any(Grupo.class))).thenAnswer(inv -> {
                 Grupo g = inv.getArgument(0);
                 g.setId(UUID.randomUUID());
+
+                if (g.getMembros() == null) g.setMembros(new ArrayList<>());
+                if (g.getAdministradores() == null) g.setAdministradores(new HashSet<>());
+
                 return g;
             });
-            Grupo resultado = grupoService.criarGrupo("Grupo Teste", ids);
+
+            Grupo resultado = grupoService.criarGrupo(dto);
             assertNotNull(resultado.getId());
         }
 
         @Test
-        void deveAdicionarMembro() {
+        void deveAdicionarMembroSendoAdmin() {
             UUID grupoId = UUID.randomUUID();
-            UUID usuarioId = UUID.randomUUID();
-            Grupo grupo = Grupo.builder().id(grupoId).membros(new ArrayList<>()).build();
-            Usuario usuario = Usuario.builder().id(usuarioId).build();
+            UUID adminId = UUID.randomUUID();
+            UUID novoMembroId = UUID.randomUUID();
 
+            Grupo grupo = new Grupo();
+            grupo.setId(grupoId);
+            grupo.setMembros(new ArrayList<>());
+            grupo.setAdministradores(new HashSet<>());
+
+            Usuario novoMembro = new Usuario();
+            novoMembro.setId(novoMembroId);
+
+            when(grupoRepository.existsByIdAndAdministradores_Id(grupoId, adminId)).thenReturn(true);
             when(grupoRepository.findById(grupoId)).thenReturn(Optional.of(grupo));
-            when(usuarioRepository.findById(usuarioId)).thenReturn(Optional.of(usuario));
+            when(usuarioRepository.findById(novoMembroId)).thenReturn(Optional.of(novoMembro));
 
-            grupoService.adicionarMembro(grupoId, usuarioId);
+            grupoService.adicionarMembro(grupoId, novoMembroId, adminId);
 
-            assertTrue(grupo.getMembros().contains(usuario));
+            assertTrue(grupo.getMembros().contains(novoMembro));
         }
 
         @Test
-        void deveRemoverMembro() {
+        void naoDeveAdicionarMembroSeNaoForAdmin() {
             UUID grupoId = UUID.randomUUID();
-            UUID usuarioId = UUID.randomUUID();
-            Usuario usuario = Usuario.builder().id(usuarioId).build();
-            List<Usuario> membros = new ArrayList<>();
-            membros.add(usuario);
-            Grupo grupo = Grupo.builder().id(grupoId).membros(membros).build();
+            UUID usuarioComumId = UUID.randomUUID();
+            UUID novoMembroId = UUID.randomUUID();
+            when(grupoRepository.existsByIdAndAdministradores_Id(grupoId, usuarioComumId)).thenReturn(false);
+            assertThrows(ResponseStatusException.class, () -> grupoService.adicionarMembro(grupoId, novoMembroId, usuarioComumId));
+        }
 
+        @Test
+        void deveRemoverMembroSendoAdmin() {
+            UUID grupoId = UUID.randomUUID();
+            UUID adminId = UUID.randomUUID();
+            UUID membroAlvoId = UUID.randomUUID();
+
+            Usuario membroAlvo = new Usuario();
+            membroAlvo.setId(membroAlvoId);
+
+            Grupo grupo = new Grupo();
+            grupo.setId(grupoId);
+            grupo.setMembros(new ArrayList<>());
+            grupo.setAdministradores(new HashSet<>());
+            grupo.getMembros().add(membroAlvo);
+
+            when(grupoRepository.existsByIdAndAdministradores_Id(grupoId, adminId)).thenReturn(true);
             when(grupoRepository.findById(grupoId)).thenReturn(Optional.of(grupo));
-            when(usuarioRepository.findById(usuarioId)).thenReturn(Optional.of(usuario));
+            when(usuarioRepository.findById(membroAlvoId)).thenReturn(Optional.of(membroAlvo));
 
-            grupoService.removerMembro(grupoId, usuarioId);
-
-            assertFalse(grupo.getMembros().contains(usuario));
+            grupoService.removerMembro(grupoId, membroAlvoId, adminId);
+            assertFalse(grupo.getMembros().contains(membroAlvo));
         }
     }
 
     @Nested
     @DisplayName("Testes do Controller (API)")
     @WebMvcTest(GrupoController.class)
+    @AutoConfigureMockMvc
     class ControllerTests {
 
         @Autowired
@@ -116,63 +150,64 @@ public class GrupoTest {
         @MockBean
         private UsuarioRepository usuarioRepository;
 
-        @Test
-        @DisplayName("POST /grupos/{id}/membros - Deve adicionar usuario")
-        @WithMockUser
-        void deveAdicionarMembroViaApi() throws Exception {
-            UUID grupoId = UUID.randomUUID();
-            UUID usuarioId = UUID.randomUUID();
-            GrupoController.AdicionarMembroRequest request =
-                    new GrupoController.AdicionarMembroRequest(usuarioId);
-
-            mockMvc.perform(post("/grupos/{id}/membros", grupoId)
-                            .with(csrf()) // <--- AQUI: Injeta o token CSRF
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request)))
-                    .andExpect(status().isOk());
-
-            verify(grupoService).adicionarMembro(grupoId, usuarioId);
-        }
-
-        @Test
-        @DisplayName("DELETE /grupos/{id}/membros/{userId} - Deve remover usuario")
-        @WithMockUser
-        void deveRemoverMembroViaApi() throws Exception {
-            UUID grupoId = UUID.randomUUID();
-            UUID usuarioId = UUID.randomUUID();
-
-            mockMvc.perform(delete("/grupos/{id}/membros/{userId}", grupoId, usuarioId)
-                            .with(csrf())) // <--- AQUI TAMBÉM
-                    .andExpect(status().isNoContent());
-
-            verify(grupoService).removerMembro(grupoId, usuarioId);
+        private Authentication getAuthentication(UUID userId) {
+            Usuario usuario = new Usuario();
+            usuario.setId(userId);
+            usuario.setNome("Usuario Teste");
+            return new UsernamePasswordAuthenticationToken(usuario, null, Collections.emptyList());
         }
 
         @Test
         @DisplayName("POST /grupos - Deve criar grupo")
-        @WithMockUser
         void deveCriarGrupoViaApi() throws Exception {
-            UUID userId = UUID.randomUUID();
-            GrupoController.NovoGrupoRequest request =
-                    new GrupoController.NovoGrupoRequest("Devs Java", List.of(userId));
+            UUID criadorId = UUID.randomUUID();
+            NovoGrupoRequest request = new NovoGrupoRequest("Devs Java", List.of(UUID.randomUUID()));
 
-            Usuario membro = new Usuario();
-            membro.setId(userId);
-            membro.setNome("Junior");
+            Usuario criador = new Usuario();
+            criador.setId(criadorId);
 
             Grupo grupoRetornado = new Grupo();
             grupoRetornado.setId(UUID.randomUUID());
             grupoRetornado.setNome("Devs Java");
-            grupoRetornado.setMembros(List.of(membro));
+            grupoRetornado.setMembros(new ArrayList<>());
+            grupoRetornado.setAdministradores(new HashSet<>());
+            grupoRetornado.getMembros().add(criador);
 
-            when(grupoService.criarGrupo(eq("Devs Java"), anyList())).thenReturn(grupoRetornado);
+            when(grupoService.criarGrupo(any(CriarGrupoDTO.class))).thenReturn(grupoRetornado);
 
-            mockMvc.perform(post("/grupos")
-                            .with(csrf()) // <--- E AQUI
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request)))
-                    .andExpect(status().isCreated())
-                    .andExpect(jsonPath("$.nome").value("Devs Java"));
+            mockMvc.perform(post("/grupos").with(csrf()).with(authentication(getAuthentication(criadorId))).contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsString(request))).andExpect(status().isCreated()).andExpect(jsonPath("$.nome").value("Devs Java"));
+        }
+
+        @Test
+        @DisplayName("POST /grupos/{id}/membros - Deve passar ID do usuário logado")
+        void deveAdicionarMembroViaApi() throws Exception {
+            UUID grupoId = UUID.randomUUID();
+            UUID novoMembroId = UUID.randomUUID();
+            UUID adminId = UUID.randomUUID();
+
+            AdicionarMembroRequest request = new AdicionarMembroRequest(novoMembroId);
+
+            mockMvc.perform(post("/grupos/{id}/membros", grupoId).with(csrf()).with(authentication(getAuthentication(adminId))).contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsString(request))).andExpect(status().isOk());
+
+            verify(grupoService).adicionarMembro(eq(grupoId), eq(novoMembroId), eq(adminId));
+        }
+
+        @Test
+        @DisplayName("DELETE /grupos/{id}/membros/{userId} - Deve remover usuario")
+        void deveRemoverMembroViaApi() throws Exception {
+            UUID grupoId = UUID.randomUUID();
+            UUID membroAlvoId = UUID.randomUUID();
+            UUID adminId = UUID.randomUUID();
+
+            mockMvc.perform(delete("/grupos/{id}/membros/{userId}", grupoId, membroAlvoId).with(csrf()).with(authentication(getAuthentication(adminId)))).andExpect(status().isNoContent());
+
+            verify(grupoService).removerMembro(eq(grupoId), eq(membroAlvoId), eq(adminId));
+        }
+
+        record NovoGrupoRequest(String nome, List<UUID> idMembros) {
+        }
+
+        record AdicionarMembroRequest(UUID usuarioId) {
         }
     }
 }
